@@ -40,23 +40,26 @@ class GameEngine:
             self._handle_click(event.pos)
 
     def _handle_click(self, pos):
-        hit_something = False
+        # Find every hole whose hit-box contains the click (hit-boxes can
+        # overlap near grid borders since hit_size > spacing), then only
+        # whack the single CLOSEST one by center distance. This guarantees
+        # one click can never award more than one point, even when two
+        # active moles' hit-boxes overlap at the click position.
+        candidates = [hole for hole in self.holes if hole.rect().collidepoint(pos)]
 
-        # NOTE: this loop does not stop after the first hole it finds
-        # under the click - it checks every hole. Each hole's hit-box
-        # (Hole.hit_size) is deliberately a bit larger than the
-        # spacing between holes, so neighboring hit-boxes overlap
-        # slightly near the grid lines. If two adjacent moles happen
-        # to both be up and the player clicks in that overlap zone,
-        # both holes register a hit from the same click, awarding two
-        # points for a single whack. See Task 1 in the README.
-        for hole in self.holes:
-            if hole.rect().collidepoint(pos):
-                if hole.whack():
-                    self.score += 1
-                    hit_something = True
+        if not candidates:
+            self.misses += 1
+            return
 
-        if not hit_something:
+        click_x, click_y = pos
+        closest_hole = min(
+            candidates,
+            key=lambda h: (h.center_x - click_x) ** 2 + (h.center_y - click_y) ** 2,
+        )
+
+        if closest_hole.whack():
+            self.score += 1
+        else:
             self.misses += 1
 
     def handle_input(self):
@@ -94,4 +97,4 @@ class GameEngine:
         if self.game_over and not getattr(self, "_game_over_logged", False):
             # NOTE: no proper game-over screen yet - see Task 2 in the README.
             print("Time's up! Final score:", self.score)
-            self._game_over_logged = True
+            self._game_over_logged = True 
