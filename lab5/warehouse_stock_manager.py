@@ -31,9 +31,11 @@ ALLOWED_OPERATORS = {
     ast.Mod: operator.mod,
 }
 
+
 def is_positive_int(value):
     """Return True if value is a whole number greater than zero."""
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
 
 def add_stock(sku="default", qty=0, history=None):
     """Receive qty units of sku and record the receipt in history.
@@ -48,11 +50,13 @@ def add_stock(sku="default", qty=0, history=None):
         logging.warning("Cannot add stock: invalid SKU %r", sku)
         return history
     if not is_positive_int(qty):
-        logging.warning("Cannot add %r units of %s: quantity must be positive", qty, sku)
+        logging.warning("Cannot add %r units of %s: quantity must be positive",
+                        qty, sku)
         return history
     warehouse_stock[sku] = warehouse_stock.get(sku, 0) + qty
     history.append(f"{datetime.now()}: Received {qty} units of {sku}")
     return history
+
 
 def remove_stock(sku, qty):
     """Issue qty units of sku. Return True on success, False if rejected.
@@ -74,14 +78,17 @@ def remove_stock(sku, qty):
     warehouse_stock[sku] -= qty
     return True
 
+
 def get_stock(sku):
     """Return the units in stock for sku (0 if the SKU is not stocked)."""
     return warehouse_stock.get(sku, 0)
+
 
 def sku_checksum(sku):
     """Return a short fingerprint used on printed bin labels."""
     # Not used for security, so MD5 is fine here (and keeps old labels valid).
     return hashlib.md5(sku.encode(), usedforsecurity=False).hexdigest()[:6]
+
 
 def load_stock(file="warehouse.json"):
     """Replace the in-memory stock with the contents of a JSON file."""
@@ -90,10 +97,12 @@ def load_stock(file="warehouse.json"):
     warehouse_stock.clear()
     warehouse_stock.update(data)
 
+
 def save_stock(file="warehouse.json"):
     """Write the current stock levels to a JSON file."""
     with open(file, "w", encoding="utf-8") as stock_file:
         json.dump(warehouse_stock, stock_file)
+
 
 def print_report():
     """Print every SKU with its quantity and bin-label checksum."""
@@ -101,9 +110,11 @@ def print_report():
     for sku, qty in warehouse_stock.items():
         print(f"{sku} -> {qty} units  [chk: {sku_checksum(str(sku))}]")
 
+
 def check_reorder(threshold=10):
     """Return the SKUs whose stock is below threshold."""
     return [sku for sku, qty in warehouse_stock.items() if qty < threshold]
+
 
 def evaluate_formula(node, current):
     """Safely evaluate a parsed arithmetic formula.
@@ -118,7 +129,8 @@ def evaluate_formula(node, current):
         return node.value
     if isinstance(node, ast.Name) and node.id == "current":
         return current
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+    if (isinstance(node, ast.UnaryOp)
+            and isinstance(node.op, (ast.UAdd, ast.USub))):
         value = evaluate_formula(node.operand, current)
         return value if isinstance(node.op, ast.UAdd) else -value
     if isinstance(node, ast.BinOp) and type(node.op) in ALLOWED_OPERATORS:
@@ -126,6 +138,7 @@ def evaluate_formula(node, current):
         right = evaluate_formula(node.right, current)
         return ALLOWED_OPERATORS[type(node.op)](left, right)
     raise ValueError("unsupported expression in formula")
+
 
 def apply_adjustment(sku, formula, password):
     """Set sku's quantity from a supervisor formula such as "current * 2".
@@ -136,7 +149,8 @@ def apply_adjustment(sku, formula, password):
     expected = os.environ.get(SUPERVISOR_ENV_VAR, "")
     if not expected or not hmac.compare_digest((password or "").encode(),
                                                expected.encode()):
-        logging.warning("Adjustment of %s denied: bad or missing password", sku)
+        logging.warning("Adjustment of %s denied: bad or missing password",
+                        sku)
         return False
     current = warehouse_stock.get(sku, 0)
     try:
@@ -145,12 +159,15 @@ def apply_adjustment(sku, formula, password):
         logging.warning("Adjustment of %s rejected: %s", sku, exc)
         return False
     if new_value < 0:
-        logging.warning("Adjustment of %s rejected: result would be negative", sku)
+        logging.warning("Adjustment of %s rejected: result would be negative",
+                        sku)
         return False
     warehouse_stock[sku] = new_value
     with open(AUDIT_FILE, "a", encoding="utf-8") as audit:
-        audit.write(f"adjusted {sku} using formula {formula!r} at {datetime.now()}\n")
+        audit.write(f"adjusted {sku} using formula {formula!r} "
+                    f"at {datetime.now()}\n")
     return True
+
 
 def main():
     """Run a short demo of the stock manager."""
@@ -162,11 +179,13 @@ def main():
     remove_stock("WID-001", 500)   # rejected: more than in stock
     print("WID-002 stock:", get_stock("WID-002"))
     print("Needs reorder:", check_reorder())
-    apply_adjustment("WID-002", "current + 25", os.environ.get(SUPERVISOR_ENV_VAR, ""))
+    password = os.environ.get(SUPERVISOR_ENV_VAR, "")
+    apply_adjustment("WID-002", "current + 25", password)
     save_stock()
     load_stock()
     print_report()
     print("stock audit complete")
+
 
 if __name__ == "__main__":
     main()
